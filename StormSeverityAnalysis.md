@@ -122,17 +122,11 @@ NA.count <- !complete.cases(select(stormdat, FATALITIES:PROPDMG, CROPDMG))
 ```
 There are 0 rows with NA values.
 
-## Reducing data set for ease of manipulation
-This is a fairly large data set, especially considering the need to do some fairly manual cleaning of the EVTYPE data, as discussed below. The below plots show the range of values present in the adverse effects. 
+## Managing EVTYPE variable
+There are 985 different event types in original `EVTYPE` data, which is much larger than the defined list in the [NOAA instruction sheet](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf). Let's see if this can be cleaned up. 
 
-
-```r
-histlog <- function(x, base) pmax(log(x,base),rep(0, length(x)))
-ggplot(filter(stormdat, FATALITIES > 0))+
-    geom_boxplot(aes(1,log(FATALITIES,10)))
-```
-
-![](StormSeverityAnalysis_files/figure-html/data.range-1.png) 
+### Reducing data set for ease of manipulation
+This is a fairly large data set, especially considering the need to do some fairly manual cleaning of the EVTYPE data, as discussed above. First we ignore data which had no adverse impact.  
 
 
 ```r
@@ -145,9 +139,15 @@ dim(stormdat)
 ## [1] 254633      8
 ```
 
-## Managing EVTYPE variable
-There are 488 different event types in `EVTYPE`, which is much larger than the defined list in the [NOAA instruction sheet](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf). Let's see if this can be cleaned up. 
+```r
+length(unique(stormdat$EVTYPE))
+```
 
+```
+## [1] 488
+```
+
+### Basic string cleanup
 
 ```r
 # clean up variations
@@ -202,37 +202,63 @@ evtypes.def <- unlist(evtypes.def[sapply(evtypes.def, length) > 0])
 evtypes.def <- str_sub(evtypes.def, 
                        str_locate(evtypes.def, "[0-9] ")[,2]+1, 
                        str_locate(evtypes.def, " \\([A-Z]\\)")[,1]-1)
+
+evtypes.def <- tolower(evtypes.def)
 ```
 
+While a better approach would be to merge the evtypes.def and evtypes variables via code, time constraints required simply fixing a few spelling variations. Ideally all of the remaining 439 event types in the data would be mapped to the 47 defined event types defined from the NOAA documentation above. 
 
 ```r
 # organize event type data to match evtype.def
 evtypes <- evtypes[order(evtypes)]
-file.create("data/event mapping.txt")
+evtypes <- data.table(type.raw=evtypes, type.mapped=evtypes)
+
+# fix common spelling errors for wind, flood, freeze
+fixtext <- function(strings, patt, repl) sapply(strings, gsub, 
+                                                pattern=patt,
+                                                replacement=repl)
+pattern.flood <- "\\bflood(ing|in|ed|s)?\\b"
+pattern.freeze <- "\\b(freez(e|ing|in|ed|s)?|frozen)\\b"
+pattern.wind <- "\\bwi(n|nd|nds|ds|s)?\\b"
+pattern.thunderstormwind <- "\\bthund?ers?t(or|ro)ms?\\s?w[a-z0-9]*\\b"
+evtypes <- mutate(evtypes, 
+                  type.mapped=fixtext(type.mapped, pattern.flood, "flood"),
+                  type.mapped=fixtext(type.mapped, pattern.freeze, "freeze"),
+                  type.mapped=fixtext(type.mapped, pattern.wind, "wind"),
+                  type.mapped=fixtext(type.mapped, pattern.thunderstormwind, 
+                                      "thunderstorm wind"))
 ```
 
-```
-## [1] TRUE
-```
-
-```r
-writeLines(evtypes.def, "data/event mapping.txt")
-con <- file("data/event mapping.txt", open="a")
-writeLines(as.character(evtypes), con)
-close(con)
-```
-
-Custom-defined catagories for disaster will be used to categorize the `EVTYPE` column. 
+There are still 409 unique event types. Time constraints will require this to be set aside as future work. This will understate any sum-over-EVTYPE value because each variation will have its own category. This will definitely need to be revisited. 
 
 ## Storm effects on health
+With a (relatively) clean list of event types, lets look at how each type can be categorized by effect on health. 
 
-### Definition of storm severity
+### Event Severity
+Storm severity can be viewed as combination of fatilities and injuries incurred by an event. In this case we'll use fatalities + injuries as shown the the below plot.
 
-### Worst event type
 
+```r
+summarydata  <- stormdat %>%
+    mutate(event=factor(EVTYPE)) %>%
+    group_by(event) %>%
+    summarize(Fatalities=sum(FATALITIES), Injuries=sum(INJURIES)) %>% 
+    filter(Fatalities > 100, Injuries > 1000) %>%
+    arrange(desc(Fatalities), desc(Injuries)) %>%
+    mutate(event=factor(event, as.character(event)))
+summarydata_melt <- melt(summarydata, "event")
+ggplot(summarydata_melt, aes(event, value, fill=variable)) + 
+    geom_bar(stat = "identity", position="dodge") + 
+    labs(title="Worst Natural Events for Public Health") +
+    labs(x="Natural Event") + 
+    labs(y="Count of Fatalities and Injuries") + 
+    theme(axis.text.x = element_text(angle = -30, hjust = 0))
+```
+
+![](StormSeverityAnalysis_files/figure-html/health.storm.results-1.png) 
 
 ## Storm effects on economy
+Storms also effect the economy in terms of property and crop damage. 
 
-### Definition of storm severity
-
-### Worst event type
+### Event Severity
+Event severity for damage is simply the total monetary damage to property and crops. 
