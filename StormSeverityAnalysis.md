@@ -24,6 +24,18 @@ The libraries used in this analysis are:
 ```r
 library(reshape2)
 library(data.table)
+```
+
+```
+## 
+## Attaching package: 'data.table'
+## 
+## The following object is masked _by_ '.GlobalEnv':
+## 
+##     .N
+```
+
+```r
 library(plyr); library(dplyr)
 ```
 
@@ -201,29 +213,7 @@ head(evtypes, 15)
 ```
 shows several spelling variations for the entry `THUNDERSTORM WINDS`. Also various hurricanes are named and labeled with variations such as `Hurricane Opal`, `Hurricane Erin`, `Hurricane Opal/High Winds`. 
 
-The "real" event types are extracted from the table of contents of the NOAA instruction sheet.
-
-```r
-# get event types from event types text file
-evtypes.raw <- readLines("data/event types.txt", warn=F)
-
-# extract 1st-level event types, excluding "...", page numbers and other data
-#   "7.2 Words, (with-stuff/other stuff) "
-evtypes.def <- str_extract_all(evtypes.raw, 
-                               "^[0-9]+\\.[0-9]+\\s[A-Za-z\\s,/()-]{2,}")
-
-# remove empty rows
-evtypes.def <- unlist(evtypes.def[sapply(evtypes.def, length) > 0])
-
-# remove leading numbers and trailing (<char>)
-evtypes.def <- str_sub(evtypes.def, 
-                       str_locate(evtypes.def, "[0-9] ")[,2]+1, 
-                       str_locate(evtypes.def, " \\([A-Z]\\)")[,1]-1)
-
-evtypes.def <- tolower(evtypes.def)
-```
-
-While a better approach would be to merge the evtypes.def and evtypes variables via code, time constraints required simply fixing a few spelling variations. Ideally all of the remaining 439 event types in the data would be mapped to the 47 defined event types defined from the NOAA documentation above. 
+While a better approach would be to merge the NOAA documented event types and evtypes variables via code, time constraints required simply fixing a few spelling variations. Ideally all of the remaining 439 event types in the data would be mapped to the approx 50 defined event types defined from the NOAA documentation. 
 
 ```r
 # organize event type data to match evtype.def

@@ -74,8 +74,14 @@ if (window.hljs && document.readyState && document.readyState === "complete") {
 <h2>Project Setup</h2>
 <p>The libraries used in this analysis are:</p>
 <pre class="r"><code>library(reshape2)
-library(data.table)
-library(plyr); library(dplyr)</code></pre>
+library(data.table)</code></pre>
+<pre><code>## 
+## Attaching package: 'data.table'
+## 
+## The following object is masked _by_ '.GlobalEnv':
+## 
+##     .N</code></pre>
+<pre class="r"><code>library(plyr); library(dplyr)</code></pre>
 <pre><code>## 
 ## Attaching package: 'dplyr'
 ## 
@@ -181,25 +187,7 @@ length(evtypes)</code></pre>
 ## [13] &quot;dense fog&quot;                 &quot;rip current&quot;              
 ## [15] &quot;thunderstorm wins&quot;</code></pre>
 <p>shows several spelling variations for the entry <code>THUNDERSTORM WINDS</code>. Also various hurricanes are named and labeled with variations such as <code>Hurricane Opal</code>, <code>Hurricane Erin</code>, <code>Hurricane Opal/High Winds</code>.</p>
-<p>The “real” event types are extracted from the table of contents of the NOAA instruction sheet.</p>
-<pre class="r"><code># get event types from event types text file
-evtypes.raw &lt;- readLines(&quot;data/event types.txt&quot;, warn=F)
-
-# extract 1st-level event types, excluding &quot;...&quot;, page numbers and other data
-#   &quot;7.2 Words, (with-stuff/other stuff) &quot;
-evtypes.def &lt;- str_extract_all(evtypes.raw, 
-                               &quot;^[0-9]+\\.[0-9]+\\s[A-Za-z\\s,/()-]{2,}&quot;)
-
-# remove empty rows
-evtypes.def &lt;- unlist(evtypes.def[sapply(evtypes.def, length) &gt; 0])
-
-# remove leading numbers and trailing (&lt;char&gt;)
-evtypes.def &lt;- str_sub(evtypes.def, 
-                       str_locate(evtypes.def, &quot;[0-9] &quot;)[,2]+1, 
-                       str_locate(evtypes.def, &quot; \\([A-Z]\\)&quot;)[,1]-1)
-
-evtypes.def &lt;- tolower(evtypes.def)</code></pre>
-<p>While a better approach would be to merge the evtypes.def and evtypes variables via code, time constraints required simply fixing a few spelling variations. Ideally all of the remaining 439 event types in the data would be mapped to the 47 defined event types defined from the NOAA documentation above.</p>
+<p>While a better approach would be to merge the NOAA documented event types and evtypes variables via code, time constraints required simply fixing a few spelling variations. Ideally all of the remaining 439 event types in the data would be mapped to the approx 50 defined event types defined from the NOAA documentation.</p>
 <pre class="r"><code># organize event type data to match evtype.def
 evtypes &lt;- evtypes[order(evtypes)]
 evtypes &lt;- data.table(type.raw=evtypes, type.mapped=evtypes)
