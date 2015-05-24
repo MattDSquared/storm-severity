@@ -119,37 +119,32 @@ While a _slightly_ more reproducible approach would be to merge the evtypes.def 
 
 # organize event type data to match evtype.def
 evtypes <- evtypes[order(evtypes)]
-evtypes <- data.table(type.raw=evtypes)
+evtypes <- data.table(type.raw=evtypes, type.mapped=evtypes)
 
-# closest match usling Levenshtein Distance
-# see: http://stackoverflow.com/questions/5721883/agrep-only-return-best-matches
-ClosestMatch = function(string, stringVector){
+# fix common spelling errors such as wind, flood, 
+fixtext <- function(strings, patt, repl) sapply(strings, gsub, 
+                                                pattern=patt,
+                                                replacement=repl)
+pattern.flood <- "\\bflood(ing|in|ed|s)?\\b"
+pattern.freeze <- "\\b(freez(e|ing|in|ed|s)?|frozen)\\b"
+pattern.wind <- "\\bwi(n|nd|nds|ds|s)?\\b"
+pattern.thunderstormwind <- "\\bthund?ers?t(or|ro)ms?\\s?w[a-z0-9]*\\b"
+evtypes <- mutate(evtypes, 
+                  type.mapped=fixtext(type.mapped, pattern.flood, "flood"),
+                  type.mapped=fixtext(type.mapped, pattern.freeze, "freeze"),
+                  type.mapped=fixtext(type.mapped, pattern.wind, "wind"),
+                  type.mapped=fixtext(type.mapped, pattern.thunderstormwind, 
+                                      "thunderstorm wind"))
 
-  distance = levenshteinSim(string, stringVector);
-  stringVector[distance == max(distance)]
-
-}
-evtypes <- mutate(evtypes, type.mapped=sapply(type.raw, 
-                                              ClosestMatch, 
-                                              stringVector=evtypes.def))
+length(unique(evtypes$type.mapped))
 
 # export to text file for viewing
 outfilename <- "data/event mapping raw.txt"
 file.create(outfilename)
 writeLines(evtypes.def, outfilename)
 con <- file(outfilename, open="a")
-writeLines(c(" ", as.character(evtypes)), con)
+writeLines(c(" ", as.character(evtypes$type.mapped)), con)
 close(con)
-
-# create file only if it doesn't already exist, this is a 1-time use
-mappingfilename <- "data/event mapping.txt"
-if (!file.exists(mappingfilename)) file.copy(outfilename, mappingfilename)
-
-# MANUAL EDITS TO data/event mapping.txt OCCURED HERE
-
-# read in mapped data
-#evtypes.mapping <- read.csv(mappingfilename)
-
 
 ```
 
