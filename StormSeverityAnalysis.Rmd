@@ -1,8 +1,9 @@
 ---
-title: "Reproducible Research: USA Storm Severity Analysis"
-output: 
+title: 'Reproducible Research: USA Storm Severity Analysis'
+output:
   html_document:
-    keep_md: true
+    keep_md: yes
+  pdf_document: default
 ---
 
 ## Synopsis
