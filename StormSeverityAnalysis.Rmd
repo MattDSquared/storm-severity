@@ -1,11 +1,24 @@
 ---
-title: "Reproducible Research: Storm Severity Analysis"
+title: "Reproducible Research: USA Storm Severity Analysis"
 output: 
   html_document:
     keep_md: true
 ---
 
-## Questions
+## Synopsis
+
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern. 
+
+This analyis project explores the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database to establish the health and economic impact of various natural events. See the [MattDSquared github repository](https://github.com/MattDSquared/storm-severity) for details and source code for this project.
+
+Findings indicate that tornadoes, excessive heat, and flash floods cause the most deaths. Tornadoes, flash floods, and thunderstorm winds cause the most economic damage.
+
+_Parts of this synopsis were copied from the Reproducible Research Coursera assignment._
+
+### Questions
+
+This analysis attempts to answer the following questions:
+
 1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
 2. Across the United States, which types of events have the greatest economic consequences?
 
@@ -20,7 +33,7 @@ library(ggplot2)
 library(stringr)
 ```
 
-## Loading and preprocessing
+## Data Processing
 
 The data comes from the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. An intermediate download location for this class is hosted on cloudfront:
 
@@ -51,16 +64,19 @@ sapply(stormdat[1,], class)
 head(stormdat)
 ```
 
-## Any missing Values? 
+### Any missing Values? 
+
 ```{r NAcount}
 NA.count <- !complete.cases(select(stormdat, FATALITIES:PROPDMG, CROPDMG))
 ```
 There are `r sum(NA.count)` rows with NA values.
 
-## Managing EVTYPE variable
+### Managing EVTYPE variable
+
 There are `r length(unique(stormdata$EVTYPE))` different event types in original `EVTYPE` data, which is much larger than the defined list in the [NOAA instruction sheet](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf). Let's see if this can be cleaned up. 
 
 ### Reducing data set for ease of manipulation
+
 This is a fairly large data set, especially considering the need to do some fairly manual cleaning of the EVTYPE data, as discussed above. First we ignore data which had no adverse impact.  
 
 ```{r data.focus}
@@ -71,6 +87,7 @@ length(unique(stormdat$EVTYPE))
 ```
 
 ### Basic string cleanup
+
 ```{r evtype.cleanup}
 # clean up variations
 stormdat <- mutate(stormdat, 
@@ -138,21 +155,27 @@ evtypes <- mutate(evtypes,
 
 There are still `r length(unique(evtypes$type.mapped))` unique event types. Time constraints will require this to be set aside as future work. This will understate any sum-over-EVTYPE value because each variation will have its own category. This will definitely need to be revisited. 
 
-## Storm effects on health
-With a (relatively) clean list of event types, lets look at how each type can be categorized by effect on health. 
+## Results
 
-### Event Severity
-Storm severity can be viewed as combination of fatilities and injuries incurred by an event. In this case we'll use fatalities + injuries as shown the the below plot.
+### Storm effects on health
+
+With this cleaned data set of event types, lets look at how each type can be categorized by effect on health. 
+
+Storm severity can be viewed as combination of fatilities and injuries incurred by an event over the history of this data (since 1950). In this case we'll use total fatalities + injuries as shown the the below plot.
 
 ```{r health.storm.results}
+min.injuries <- 1000
+
 summarydata  <- stormdat %>%
     mutate(event=factor(EVTYPE)) %>%
     group_by(event) %>%
     summarize(Fatalities=sum(FATALITIES), Injuries=sum(INJURIES)) %>% 
-    filter(Fatalities > 100, Injuries > 1000) %>%
+    filter(Injuries > min.injuries) %>%
     arrange(desc(Fatalities), desc(Injuries)) %>%
     mutate(event=factor(event, as.character(event)))
+
 summarydata_melt <- melt(summarydata, "event")
+
 ggplot(summarydata_melt, aes(event, value, fill=variable)) + 
     geom_bar(stat = "identity", position="dodge") + 
     labs(title="Worst Natural Events for Public Health") +
@@ -161,8 +184,42 @@ ggplot(summarydata_melt, aes(event, value, fill=variable)) +
     theme(axis.text.x = element_text(angle = -30, hjust = 0))
 ```
 
-## Storm effects on economy
-Storms also effect the economy in terms of property and crop damage. 
+For clarity, only events with more than `r min.injuries` injuries were reported.
 
-### Event Severity
-Event severity for damage is simply the total monetary damage to property and crops. 
+### Storm effects on economy
+
+Storms also effect the economy in terms of property and crop damage. Event severity for damage can be illustrated by the total monetary damage to property and crops since 1950. 
+
+```{r econ.storm.results}
+min.damage <- 100000
+
+summarydata  <- stormdat %>%
+    mutate(event=factor(EVTYPE)) %>%
+    mutate(TOTALDMG=PROPDMG+CROPDMG) %>%
+    group_by(event) %>%
+    summarize(Property.Damage=sum(PROPDMG), Crop.Damage=sum(CROPDMG), 
+              Total.Damage=sum(TOTALDMG)) %>% 
+    filter(Total.Damage > min.damage) %>% 
+    arrange(desc(Total.Damage)) %>%
+    select(event, Property.Damage, Crop.Damage) %>%
+    mutate(event=factor(event, as.character(event)))
+
+summarydata_melt <- melt(summarydata, "event")
+
+ggplot(summarydata_melt, aes(event, value/1000, fill=variable)) + 
+    geom_bar(stat = "identity") + 
+    labs(title="Worst Natural Events for the Economy") +
+    labs(x="Natural Event") + 
+    labs(y="Economic damage (in million $)") + 
+    theme(axis.text.x = element_text(angle = -30, hjust = 0))
+```
+
+For clarity, only events with more than $`r min.damage/1000` million in damages were reported.
+
+## Future Work
+
+Items which would greatly improve this analysis:
+
+* complete mapping of `EVTYPE` to the NOAA-defined events
+* Summarizing results as an anual or monthly average
+* observing adverse effects over time.
