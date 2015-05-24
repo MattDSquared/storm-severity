@@ -9,6 +9,7 @@
 The libraries used in this analysis are:
 
 ```r
+library(reshape2)
 library(data.table)
 library(plyr); library(dplyr)
 ```
@@ -37,6 +38,7 @@ library(plyr); library(dplyr)
 
 ```r
 library(ggplot2)
+library(stringr)
 ```
 
 ## Loading and preprocessing
@@ -120,10 +122,18 @@ NA.count <- !complete.cases(select(stormdat, FATALITIES:PROPDMG, CROPDMG))
 ```
 There are 0 rows with NA values.
 
-## Managing EVTYPE variable
-There are 985 different event types in `EVTYPE`, which is much larger than the defined list in the [NOAA instruction sheet](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf). Let's see if this can be cleaned up. 
+## Reducing data set for ease of manipulation
+This is a fairly large data set, especially considering the need to do some fairly manual cleaning of the EVTYPE data, as discussed below. The below plots show the range of values present in the adverse effects. 
 
-First we exclude any entry which contains no adverse effects.
+
+```r
+histlog <- function(x, base) pmax(log(x,base),rep(0, length(x)))
+ggplot(filter(stormdat, FATALITIES > 0))+
+    geom_boxplot(aes(1,log(FATALITIES,10)))
+```
+
+![](StormSeverityAnalysis_files/figure-html/data.range-1.png) 
+
 
 ```r
 # filter for adverse effects > 0
@@ -135,36 +145,84 @@ dim(stormdat)
 ## [1] 254633      8
 ```
 
-```r
-length(levels(stormdat$EVTYPE))
-```
+## Managing EVTYPE variable
+There are 488 different event types in `EVTYPE`, which is much larger than the defined list in the [NOAA instruction sheet](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf). Let's see if this can be cleaned up. 
 
-```
-## [1] 985
-```
-That didn't seem to have much effect, but at least we can work with fewer data.
-
-Taking a look at a few values of `EVTYPE`:
 
 ```r
-head(unique(stormdat$EVTYPE), 15)
+# clean up variations
+stormdat <- mutate(stormdat, 
+                   EVTYPE=str_trim(EVTYPE),
+                   EVTYPE=tolower(EVTYPE),
+                   EVTYPE=gsub("\\.$", "", EVTYPE),
+                   EVTYPE=gsub("/ ", "/", EVTYPE))
+
+evtypes <- unique(stormdat$EVTYPE)
+length(evtypes)
 ```
 
 ```
-##  [1] TORNADO                   TSTM WIND                
-##  [3] HAIL                      ICE STORM/FLASH FLOOD    
-##  [5] WINTER STORM              HURRICANE OPAL/HIGH WINDS
-##  [7] THUNDERSTORM WINDS        HURRICANE ERIN           
-##  [9] HURRICANE OPAL            HEAVY RAIN               
-## [11] LIGHTNING                 THUNDERSTORM WIND        
-## [13] DENSE FOG                 RIP CURRENT              
-## [15] THUNDERSTORM WINS        
-## 985 Levels:    HIGH SURF ADVISORY  COASTAL FLOOD ... WND
+## [1] 439
+```
+That helped a little, but there's still too much data.
+
+Taking a look at values of `EVTYPE`:
+
+```r
+head(evtypes, 15)
+```
+
+```
+##  [1] "tornado"                   "tstm wind"                
+##  [3] "hail"                      "ice storm/flash flood"    
+##  [5] "winter storm"              "hurricane opal/high winds"
+##  [7] "thunderstorm winds"        "hurricane erin"           
+##  [9] "hurricane opal"            "heavy rain"               
+## [11] "lightning"                 "thunderstorm wind"        
+## [13] "dense fog"                 "rip current"              
+## [15] "thunderstorm wins"
 ```
 shows several spelling variations for the entry `THUNDERSTORM WINDS`. Also various hurricanes are named and labeled with variations such as `Hurricane Opal`, `Hurricane Erin`, `Hurricane Opal/High Winds`. 
 
-Custom-defined catagories for disaster were used to categorize the `EVTYPE` column. 
+The "real" event types are extracted from the table of contents of the NOAA instruction sheet.
 
+```r
+# get event types from event types text file
+evtypes.raw <- readLines("data/event types.txt", warn=F)
+
+# extract 1st-level event types, excluding "...", page numbers and other data
+#   "7.2 Words, (with-stuff/other stuff) "
+evtypes.def <- str_extract_all(evtypes.raw, 
+                               "^[0-9]+\\.[0-9]+\\s[A-Za-z\\s,/()-]{2,}")
+
+# remove empty rows
+evtypes.def <- unlist(evtypes.def[sapply(evtypes.def, length) > 0])
+
+# remove leading numbers and trailing (<char>)
+evtypes.def <- str_sub(evtypes.def, 
+                       str_locate(evtypes.def, "[0-9] ")[,2]+1, 
+                       str_locate(evtypes.def, " \\([A-Z]\\)")[,1]-1)
+```
+
+
+```r
+# organize event type data to match evtype.def
+evtypes <- evtypes[order(evtypes)]
+file.create("data/event mapping.txt")
+```
+
+```
+## [1] TRUE
+```
+
+```r
+writeLines(evtypes.def, "data/event mapping.txt")
+con <- file("data/event mapping.txt", open="a")
+writeLines(as.character(evtypes), con)
+close(con)
+```
+
+Custom-defined catagories for disaster will be used to categorize the `EVTYPE` column. 
 
 ## Storm effects on health
 

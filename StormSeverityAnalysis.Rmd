@@ -13,10 +13,10 @@ output:
 
 The libraries used in this analysis are:
 ```{r setup}
+library(reshape2)
 library(data.table)
 library(plyr); library(dplyr)
 library(ggplot2)
-library(stringr)
 ```
 
 ## Loading and preprocessing
@@ -56,26 +56,45 @@ NA.count <- !complete.cases(select(stormdat, FATALITIES:PROPDMG, CROPDMG))
 ```
 There are `r sum(NA.count)` rows with NA values.
 
-## Managing EVTYPE variable
-There are `r length(levels(stormdat$EVTYPE))` different event types in `EVTYPE`, which is much larger than the defined list in the [NOAA instruction sheet](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf). Let's see if this can be cleaned up. 
+## Reducing data set for ease of manipulation
+This is a fairly large data set, especially considering the need to do some fairly manual cleaning of the EVTYPE data, as discussed below. The below plots show the range of values present in the adverse effects. 
 
-First we exclude any entry which contains no adverse effects.
-```{r remove.ineffective.rows}
+```{r data.range}
+histlog <- function(x, base) pmax(log(x,base),rep(0, length(x)))
+ggplot(filter(stormdat, FATALITIES > 0))+
+    geom_boxplot(aes(1,log(FATALITIES,10)))
+```
+
+```{r data.focus}
 # filter for adverse effects > 0
 stormdat <- filter(stormdat, (FATALITIES+INJURIES+PROPDMG+CROPDMG) > 0)
 dim(stormdat)
-length(levels(stormdat$EVTYPE))
 ```
-That didn't seem to have much effect, but at least we can work with fewer data.
+
+## Managing EVTYPE variable
+There are `r length(unique(stormdat$EVTYPE))` different event types in `EVTYPE`, which is much larger than the defined list in the [NOAA instruction sheet](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf). Let's see if this can be cleaned up. 
+
+```{r evtype.cleanup}
+# clean up variations
+stormdat <- mutate(stormdat, 
+                   EVTYPE=str_trim(EVTYPE),
+                   EVTYPE=tolower(EVTYPE),
+                   EVTYPE=gsub("\\.$", "", EVTYPE),
+                   EVTYPE=gsub("/ ", "/", EVTYPE))
+
+evtypes <- unique(stormdat$EVTYPE)
+length(evtypes)
+```
+That helped a little, but there's still too much data.
 
 Taking a look at values of `EVTYPE`:
 ```{r evtype.values}
-head(unique(stormdat$EVTYPE), 15)
+head(evtypes, 15)
 ```
 shows several spelling variations for the entry `THUNDERSTORM WINDS`. Also various hurricanes are named and labeled with variations such as `Hurricane Opal`, `Hurricane Erin`, `Hurricane Opal/High Winds`. 
 
 The "real" event types are extracted from the table of contents of the NOAA instruction sheet.
-```{r evtype.categorize}
+```{r evtype.definition}
 # get event types from event types text file
 evtypes.raw <- readLines("data/event types.txt", warn=F)
 
@@ -91,9 +110,51 @@ evtypes.def <- unlist(evtypes.def[sapply(evtypes.def, length) > 0])
 evtypes.def <- str_sub(evtypes.def, 
                        str_locate(evtypes.def, "[0-9] ")[,2]+1, 
                        str_locate(evtypes.def, " \\([A-Z]\\)")[,1]-1)
+
+evtypes.def <- tolower(evtypes.def)
 ```
 
-Custom-defined catagories for disaster will be used to categorize the `EVTYPE` column. 
+While a _slightly_ more reproducible approach would be to merge the evtypes.def and evtypes variables via code, time constraints required a manual name-value-pair mapping. This mapping was initialized from the below code then the messy event types were mapped by hand to the `r length(evtypes.def)` defined event types from above. 
+```{r evtype.mapping}
+
+# organize event type data to match evtype.def
+evtypes <- evtypes[order(evtypes)]
+evtypes <- data.table(type.raw=evtypes)
+
+# closest match usling Levenshtein Distance
+# see: http://stackoverflow.com/questions/5721883/agrep-only-return-best-matches
+ClosestMatch = function(string, stringVector){
+
+  distance = levenshteinSim(string, stringVector);
+  stringVector[distance == max(distance)]
+
+}
+evtypes <- mutate(evtypes, type.mapped=sapply(type.raw, 
+                                              ClosestMatch, 
+                                              stringVector=evtypes.def))
+
+# export to text file for viewing
+outfilename <- "data/event mapping raw.txt"
+file.create(outfilename)
+writeLines(evtypes.def, outfilename)
+con <- file(outfilename, open="a")
+writeLines(c(" ", as.character(evtypes)), con)
+close(con)
+
+# create file only if it doesn't already exist, this is a 1-time use
+mappingfilename <- "data/event mapping.txt"
+if (!file.exists(mappingfilename)) file.copy(outfilename, mappingfilename)
+
+# MANUAL EDITS TO data/event mapping.txt OCCURED HERE
+
+# read in mapped data
+#evtypes.mapping <- read.csv(mappingfilename)
+
+
+```
+
+The finished mapping is stored in `r mappingfilename`.
+
 ## Storm effects on health
 
 ### Definition of storm severity
